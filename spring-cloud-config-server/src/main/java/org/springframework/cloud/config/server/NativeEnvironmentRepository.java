@@ -16,25 +16,28 @@
 
 package org.springframework.cloud.config.server;
 
-import java.io.File;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
-
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
-
+import org.springframework.beans.BeansException;
 import org.springframework.boot.autoconfigure.PropertyPlaceholderAutoConfiguration;
 import org.springframework.boot.builder.SpringApplicationBuilder;
 import org.springframework.boot.context.config.ConfigFileApplicationListener;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.cloud.config.environment.Environment;
 import org.springframework.cloud.config.environment.PropertySource;
+import org.springframework.context.ApplicationContext;
+import org.springframework.context.ApplicationContextAware;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.core.env.ConfigurableEnvironment;
 import org.springframework.core.env.MapPropertySource;
 import org.springframework.core.env.StandardEnvironment;
 import org.springframework.util.StringUtils;
+
+import java.io.File;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 
 /**
  * Simple implementation of {@link EnvironmentRepository} that uses a SpringApplication
@@ -46,7 +49,7 @@ import org.springframework.util.StringUtils;
  * @author Roy Clarkson
  */
 @ConfigurationProperties("spring.cloud.config.server.native")
-public class NativeEnvironmentRepository implements EnvironmentRepository {
+public class NativeEnvironmentRepository implements EnvironmentRepository, ApplicationContextAware {
 
 	private static Log logger = LogFactory.getLog(NativeEnvironmentRepository.class);
 
@@ -67,6 +70,8 @@ public class NativeEnvironmentRepository implements EnvironmentRepository {
 			"classpath:/config/", "file:./", "file:./config/" };
 
 	private ConfigurableEnvironment environment;
+
+	private ApplicationEventPublisher eventPublisher;
 
 	public NativeEnvironmentRepository(ConfigurableEnvironment environment) {
 		this.environment = environment;
@@ -164,9 +169,14 @@ public class NativeEnvironmentRepository implements EnvironmentRepository {
 				}
 			}
 			logger.info("Adding property source: " + name);
-			result.add(new PropertySource(name, source.getSource()));
+			addPropertySource(result, source, name);
 		}
 		return result;
+	}
+
+	private void addPropertySource(Environment result, PropertySource source, String name) {
+		result.add(new PropertySource(name, source.getSource()));
+		eventPublisher.publishEvent(new PropertySourceRegisteredEvent(this, name));
 	}
 
 	private String[] getArgs(String config, String label) {
@@ -218,4 +228,8 @@ public class NativeEnvironmentRepository implements EnvironmentRepository {
 				&& !location.endsWith(".yaml");
 	}
 
+	@Override
+	public void setApplicationContext(ApplicationContext applicationContext) throws BeansException {
+		this.eventPublisher = applicationContext;
+	}
 }
